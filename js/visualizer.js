@@ -5,7 +5,7 @@
 
 // Tree layout constants
 const NODE_WIDTH = 160;
-const NODE_HEIGHT = 50;
+const NODE_HEIGHT = 65;
 const HORIZONTAL_SPACING = 40;
 const VERTICAL_SPACING = 80;
 
@@ -423,6 +423,48 @@ function getJoinMetrics(metricsData) {
 }
 
 /**
+ * Calculate total time for a node based on all its operators
+ * Rules:
+ * - SCAN: OperatorTotalTime + ScanTime
+ * - EXCHANGE: OperatorTotalTime (source + sink) + NetworkTime
+ * - JOIN: OperatorTotalTime (probe + build)
+ * - Others: OperatorTotalTime
+ */
+function getNodeTotalTime(metricsData) {
+  if (!metricsData || !metricsData.instances || metricsData.instances.length === 0) {
+    return null;
+  }
+  
+  let totalUs = 0;
+  
+  for (const inst of metricsData.instances) {
+    const opName = inst.operatorName.toUpperCase();
+    const common = inst.metrics?.CommonMetrics || {};
+    const unique = inst.metrics?.UniqueMetrics || {};
+    
+    // Skip subordinate operators that are just buffering (their time is minimal)
+    if (opName === 'CHUNK_ACCUMULATE') continue;
+    
+    // Add OperatorTotalTime for all operators
+    if (common.OperatorTotalTime) {
+      totalUs += parseTimeToMicroseconds(common.OperatorTotalTime);
+    }
+    
+    // Add ScanTime for SCAN operators
+    if (opName.includes('SCAN') && unique.ScanTime) {
+      totalUs += parseTimeToMicroseconds(unique.ScanTime);
+    }
+    
+    // Add NetworkTime for EXCHANGE_SINK operators
+    if (opName === 'EXCHANGE_SINK' && unique.NetworkTime) {
+      totalUs += parseTimeToMicroseconds(unique.NetworkTime);
+    }
+  }
+  
+  return totalUs > 0 ? formatMicroseconds(totalUs) : null;
+}
+
+/**
  * Get row count (PullRowNum) from a node's metrics
  * Returns formatted string or null if not available
  */
@@ -623,6 +665,7 @@ function renderTreeWithSVG(layout, graph) {
     const displayName = node.name.length > 18 ? node.name.substring(0, 16) + '...' : node.name;
     const hasMetrics = hasExpandableMetrics(node);
     const metricsDropdown = buildMetricsDropdown(node);
+    const totalTime = node.metrics ? getNodeTotalTime(node.metrics) : null;
     
     const nodeStyle = `
       position:absolute;
@@ -644,6 +687,11 @@ function renderTreeWithSVG(layout, graph) {
                         nodeClass === 'aggregate' ? '#a371f7' : 
                         nodeClass === 'union' ? '#3fb950' : '#8b949e';
     
+    // Build time display - show in green if we have it
+    const timeDisplay = totalTime 
+      ? `<div style="font-size:10px;color:#3fb950;margin-top:2px;font-weight:500;">⏱ ${totalTime}</div>`
+      : '';
+    
     nodesHtml += `
       <div id="node-${id}" class="plan-node ${nodeClass} ${hasMetrics ? 'has-metrics' : ''}" 
            style="${nodeStyle}border-left:3px solid ${borderColor};"
@@ -653,6 +701,7 @@ function renderTreeWithSVG(layout, graph) {
           ${hasMetrics ? `<span id="icon-${id}" class="expand-icon" style="font-size:8px;color:#00d4aa;">▼</span>` : ''}
         </div>
         <div style="font-size:10px;color:#8b949e;margin-top:2px;">id=${node.planNodeId}</div>
+        ${timeDisplay}
         ${metricsDropdown}
       </div>
     `;
