@@ -668,6 +668,11 @@ td.rows {
   gap: 1rem;
 }
 
+/* Join comparison: 3 cards per row for better readability */
+#compareJoinCards {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .compare-card {
   background: rgba(33, 38, 45, 0.6);
   border: 1px solid var(--border);

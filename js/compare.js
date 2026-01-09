@@ -2,8 +2,9 @@
  * Query comparison functionality
  */
 
-import { parseNumericValue, sumMetric, formatNumber, formatBytes } from './utils.js';
+import { parseNumericValue, sumMetric, formatNumber, formatBytes, formatTime } from './utils.js';
 import { findConnectorScans } from './scanParser.js';
+import { findHashJoins, combineJoinOperators, calculateJoinStats, sumOperatorTimesByPlanNodeId, extractJoinMetrics } from './joinParser.js';
 
 // Store loaded comparison data
 let compareData = {
@@ -67,10 +68,26 @@ function loadCompareFile(file, type, dropZone) {
       const execution = query.Execution || {};
       const scans = findConnectorScans(execution);
 
+      // Extract join data
+      const { probes, builds } = findHashJoins(execution);
+      const joins = combineJoinOperators(probes, builds);
+      const planNodeIds = new Set(joins.map(j => j.planNodeId));
+      const totalTimesByPlanNodeId = sumOperatorTimesByPlanNodeId(execution, planNodeIds);
+
+      // Build join metrics with total time (using extractJoinMetrics for proper structure)
+      const joinMetrics = joins.map(join => {
+        const totalTime = totalTimesByPlanNodeId.get(join.planNodeId) || 0;
+        return extractJoinMetrics(join, totalTime, null);
+      });
+
+      const joinStats = calculateJoinStats(joinMetrics);
+
       compareData[type] = {
         summary,
         execution,
         scans,
+        joins: joinMetrics,
+        joinStats,
         filename: file.name
       };
 
@@ -134,35 +151,82 @@ function renderComparison() {
 
   // Scan metrics comparison
   const scanCards = [
-    { 
-      label: 'Connector Scan Operators', 
-      baseline: baseline.scans.length, 
+    {
+      label: 'Connector Scan Operators',
+      baseline: baseline.scans.length,
       optimized: optimized.scans.length,
       lowerIsBetter: true
     },
-    { 
-      label: 'Total Bytes Read', 
+    {
+      label: 'Total Bytes Read',
       baseline: sumMetric(baseline.scans, 'BytesRead', 'unique'),
       optimized: sumMetric(optimized.scans, 'BytesRead', 'unique'),
       format: 'bytes',
       lowerIsBetter: true
     },
-    { 
-      label: 'Total Rows Scanned', 
+    {
+      label: 'Total Rows Scanned',
       baseline: sumMetric(baseline.scans, 'RawRowsRead', 'unique'),
       optimized: sumMetric(optimized.scans, 'RawRowsRead', 'unique'),
       format: 'number',
       lowerIsBetter: true
     },
-    { 
-      label: 'Total Rows Read', 
+    {
+      label: 'Total Rows Read',
       baseline: sumMetric(baseline.scans, 'RowsRead', 'unique'),
       optimized: sumMetric(optimized.scans, 'RowsRead', 'unique'),
       format: 'number',
       lowerIsBetter: true
     },
   ];
-  renderCompareCardsCustom('compareScanCards', scanCards);
+  document.getElementById('compareScanCards').innerHTML = generateCompareCardsHTML(scanCards);
+
+  // Join metrics comparison
+  // Note: Time metrics are sum of avg time per instance, not total query time
+  const joinCards = [
+    {
+      label: 'Join Operators',
+      baseline: baseline.joinStats.totalJoins,
+      optimized: optimized.joinStats.totalJoins,
+      lowerIsBetter: true
+    },
+    {
+      label: 'Hash Table Memory',
+      baseline: baseline.joinStats.totalHashTableMemoryBytes,
+      optimized: optimized.joinStats.totalHashTableMemoryBytes,
+      format: 'bytes',
+      lowerIsBetter: true
+    },
+    {
+      label: 'Rows Spilled',
+      baseline: baseline.joinStats.totalRowsSpilled,
+      optimized: optimized.joinStats.totalRowsSpilled,
+      format: 'number',
+      lowerIsBetter: true
+    },
+    {
+      label: 'Join Time (Avg/Instance)',
+      baseline: baseline.joinStats.totalTimeSeconds,
+      optimized: optimized.joinStats.totalTimeSeconds,
+      format: 'time',
+      lowerIsBetter: true
+    },
+    {
+      label: 'Build Time (Avg/Instance)',
+      baseline: baseline.joinStats.totalBuildTimeSeconds,
+      optimized: optimized.joinStats.totalBuildTimeSeconds,
+      format: 'time',
+      lowerIsBetter: true
+    },
+    {
+      label: 'Probe Time (Avg/Instance)',
+      baseline: baseline.joinStats.totalProbeTimeSeconds,
+      optimized: optimized.joinStats.totalProbeTimeSeconds,
+      format: 'time',
+      lowerIsBetter: true
+    },
+  ];
+  document.getElementById('compareJoinCards').innerHTML = generateCompareCardsHTML(joinCards);
 }
 
 /**
@@ -206,25 +270,28 @@ function renderCompareCards(containerId, metrics, baselineExec, optimizedExec, l
 }
 
 /**
- * Render comparison cards with custom values
+ * Generate HTML for comparison cards with custom values
  */
-function renderCompareCardsCustom(containerId, cards) {
-  const container = document.getElementById(containerId);
-  
-  container.innerHTML = cards.map(card => {
+function generateCompareCardsHTML(cards) {
+  return cards.map(card => {
     const baselineNum = card.baseline;
     const optimizedNum = card.optimized;
-    
-    const baselineDisplay = card.format === 'bytes' ? formatBytes(baselineNum) : 
-                            card.format === 'number' ? formatNumber(baselineNum) : baselineNum;
-    const optimizedDisplay = card.format === 'bytes' ? formatBytes(optimizedNum) : 
-                             card.format === 'number' ? formatNumber(optimizedNum) : optimizedNum;
-    
+
+    const formatValue = (val) => {
+      if (card.format === 'bytes') return formatBytes(val);
+      if (card.format === 'number') return formatNumber(val);
+      if (card.format === 'time') return formatTime(val);
+      return val;
+    };
+
+    const baselineDisplay = formatValue(baselineNum);
+    const optimizedDisplay = formatValue(optimizedNum);
+
     const change = baselineNum > 0 ? ((optimizedNum - baselineNum) / baselineNum) * 100 : 0;
     const improved = card.lowerIsBetter ? change < 0 : change > 0;
     const changeClass = Math.abs(change) < 1 ? 'neutral' : (improved ? 'improved' : 'regressed');
     const changeSymbol = change > 0 ? '+' : '';
-    
+
     return `
       <div class="compare-card">
         <div class="compare-card-label">${card.label}</div>

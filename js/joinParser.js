@@ -434,11 +434,15 @@ export function calculateJoinStats(joins) {
   return {
     totalJoins: joins.length,
     totalTime: formatTime(totalTimeSeconds),
+    totalTimeSeconds: totalTimeSeconds,
     totalBuildTime: formatTime(totalBuildTimeSeconds),
+    totalBuildTimeSeconds: totalBuildTimeSeconds,
     totalBuildTimePct: totalBuildTimePct,
     totalProbeTime: formatTime(totalProbeTimeSeconds),
+    totalProbeTimeSeconds: totalProbeTimeSeconds,
     totalProbeTimePct: totalProbeTimePct,
     totalHashTableMemory: formatBytes(totalHashTableMemoryBytes),
+    totalHashTableMemoryBytes: totalHashTableMemoryBytes,
     maxHashTableMemory: formatBytes(maxHashTableMemoryBytes),
     totalRowsSpilled: totalRowsSpilled
   };
