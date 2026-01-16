@@ -790,16 +790,17 @@ td.rows {
 .plan-canvas {
   overflow: hidden;
   padding: 0;
-  min-height: 600px;
+  /* Use viewport height minus header (~56px), nav (~50px), main padding (32px), plan-header (~70px), and some bottom margin */
+  height: calc(100vh - 220px);
+  min-height: 400px;
   position: relative;
-  cursor: default;
+  cursor: grab;
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 
 .plan-canvas.panning { cursor: grabbing; }
-.plan-canvas.can-pan { cursor: grab; }
 
 /* Zoom Container - receives CSS transform for pan/zoom */
 .zoom-container {

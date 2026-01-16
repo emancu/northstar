@@ -327,7 +327,7 @@ function setupViewport() {
     planCanvas._viewportCleanup();
   }
 
-  // Wheel zoom
+  // Wheel/pinch: zoom in/out
   const handleWheel = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -352,11 +352,15 @@ function setupViewport() {
     updateTransform();
   };
 
-  // Pointer down - start pan
+  // Pointer down - start pan (left-click or right-click)
   const handlePointerDown = (e) => {
-    const shouldPan = (e.button === 0 && viewportState.isSpacePressed) || e.button === 2;
+    // Don't pan if clicking on a node with metrics (let it handle the click)
+    if (e.target.closest('.plan-node.has-metrics')) {
+      return;
+    }
 
-    if (shouldPan) {
+    // Allow panning with left-click (button 0) or right-click (button 2)
+    if (e.button === 0 || e.button === 2) {
       e.preventDefault();
       viewportState.isPanning = true;
       viewportState.pointerId = e.pointerId;
@@ -376,11 +380,9 @@ function setupViewport() {
       const dx = e.clientX - viewportState.startX;
       const dy = e.clientY - viewportState.startY;
 
-      // Apply dampening to prevent overly sensitive panning when zoomed out
-      // Use sqrt of zoom to moderate the effect at extreme zoom levels
-      const sensitivity = Math.max(0.3, Math.sqrt(camera.zoom));
-      camera.x = viewportState.startCameraX - (dx / camera.zoom) * sensitivity;
-      camera.y = viewportState.startCameraY - (dy / camera.zoom) * sensitivity;
+      // Direct 1:1 panning - move canvas by the drag distance
+      camera.x = viewportState.startCameraX - dx / camera.zoom;
+      camera.y = viewportState.startCameraY - dy / camera.zoom;
 
       clampCameraToBounds();
       updateTransform();
@@ -393,7 +395,6 @@ function setupViewport() {
       viewportState.isPanning = false;
       viewportState.pointerId = null;
       planCanvas.classList.remove('panning');
-      planCanvas.classList.toggle('can-pan', viewportState.isSpacePressed);
       planCanvas.releasePointerCapture(e.pointerId);
     }
   };
@@ -409,12 +410,6 @@ function setupViewport() {
     // Only handle if plan tab is visible and not in input
     if (!planContainer || planContainer.style.display === 'none') return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-    if (e.code === 'Space' && !viewportState.isSpacePressed) {
-      e.preventDefault();
-      viewportState.isSpacePressed = true;
-      planCanvas.classList.add('can-pan');
-    }
 
     switch (e.key) {
       case '+':
@@ -459,13 +454,8 @@ function setupViewport() {
     }
   };
 
-  const handleKeyUp = (e) => {
-    if (e.code === 'Space') {
-      viewportState.isSpacePressed = false;
-      if (!viewportState.isPanning) {
-        planCanvas.classList.remove('can-pan');
-      }
-    }
+  const handleKeyUp = () => {
+    // Reserved for future keyboard interactions
   };
 
   // Minimap click to navigate
@@ -547,7 +537,7 @@ function cleanupViewport() {
   document.querySelector('.viewport-minimap')?.classList.remove('visible');
 
   // Reset cursor
-  planCanvas?.classList.remove('panning', 'can-pan');
+  planCanvas?.classList.remove('panning');
 }
 
 /**
