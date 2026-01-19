@@ -43,7 +43,9 @@ export function getQuery() {
  * Set a new query (from file upload or other source)
  */
 export function setQuery(queryJson) {
+  console.log('setQuery called with data:', !!queryJson);
   currentQuery = queryJson;
+  console.log('currentQuery is now set:', !!currentQuery);
 
   // Notify all listeners
   notifyListeners();
@@ -93,9 +95,13 @@ function notifyListeners() {
  * Encode JSON with LZ-String compression (accessed via window global)
  */
 function encodeQuery(json) {
+  console.log('encodeQuery called, LZString available:', !!window.LZString);
   const jsonString = JSON.stringify(json);
+  console.log('JSON string length:', jsonString.length);
   // Access LZString from window global (loaded via script tag)
-  return window.LZString.compressToEncodedURIComponent(jsonString);
+  const compressed = window.LZString.compressToEncodedURIComponent(jsonString);
+  console.log('Compressed length:', compressed.length);
+  return compressed;
 }
 
 /**
@@ -146,13 +152,20 @@ export function hasQuery() {
  * Get a shareable URL for the current query
  */
 export function getShareableUrl() {
+  console.log('getShareableUrl called, currentQuery exists:', !!currentQuery);
+
   if (!currentQuery) {
+    console.log('No query loaded!');
     return window.location.origin + window.location.pathname;
   }
 
   try {
+    console.log('Encoding query...');
     const encoded = encodeQuery(currentQuery);
-    return `${window.location.origin}${window.location.pathname}#${URL_HASH_PREFIX}${encoded}`;
+    console.log('Encoded length:', encoded.length);
+    const url = `${window.location.origin}${window.location.pathname}#${URL_HASH_PREFIX}${encoded}`;
+    console.log('Generated URL length:', url.length);
+    return url;
   } catch (error) {
     console.error('Failed to generate shareable URL:', error);
     return window.location.origin + window.location.pathname;
