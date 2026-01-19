@@ -161,5 +161,14 @@ export function getShareableUrl() {
   if (!currentQuery) {
     return window.location.origin + window.location.pathname;
   }
-  return window.location.href;
+
+  // Manually construct URL with hash to ensure it's current
+  try {
+    const jsonString = JSON.stringify(currentQuery);
+    const compressed = LZString.compressToEncodedURIComponent(jsonString);
+    return `${window.location.origin}${window.location.pathname}#${URL_HASH_PREFIX}${compressed}`;
+  } catch (error) {
+    console.error('Failed to generate shareable URL:', error);
+    return window.location.origin + window.location.pathname;
+  }
 }
