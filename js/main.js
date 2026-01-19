@@ -10,6 +10,7 @@ import { setupPlanDropZone } from './visualizer.js';
 import { processJoinProfile } from './joinParser.js';
 import { renderJoinDashboard } from './joinRender.js';
 import { trackEvent } from './analytics.js';
+import { initQueryState, getQuery, setQuery, addListener, hasQuery, getShareableUrl } from './queryState.js';
 
 // ========================================
 // DOM Elements - Scan Summary Tab
@@ -72,27 +73,30 @@ fileInput.addEventListener('change', (e) => {
 // ========================================
 function loadFile(file) {
   const reader = new FileReader();
-  
+
   reader.onload = (e) => {
     try {
       // Parse the JSON content
       const json = JSON.parse(e.target.result);
 
-      // Process the data
-      const { summary, execution, connectorScans } = processQueryProfile(json);
+      // Validate it's a query profile
+      if (!json.Query) {
+        alert('Invalid query profile format - missing "Query" field');
+        return;
+      }
 
-      // Render the dashboard
-      renderDashboard(summary, execution, connectorScans, dropZone, dashboard);
+      // Update global state (will trigger all tabs to update)
+      setQuery(json);
 
       // Track successful upload
       trackEvent('upload-scan');
-      
+
     } catch (error) {
       console.error('Error parsing JSON:', error);
       alert('Error parsing JSON file: ' + error.message);
     }
   };
-  
+
   reader.readAsText(file);
 }
 
@@ -167,11 +171,14 @@ function loadJoinFile(file) {
       // Parse the JSON content
       const json = JSON.parse(e.target.result);
 
-      // Process the data for join analysis
-      const { summary, execution, joins } = processJoinProfile(json);
+      // Validate it's a query profile
+      if (!json.Query) {
+        alert('Invalid query profile format - missing "Query" field');
+        return;
+      }
 
-      // Render the join dashboard
-      renderJoinDashboard(summary, execution, joins, joinDropZone, joinDashboard);
+      // Update global state (will trigger all tabs to update)
+      setQuery(json);
 
       // Track successful upload
       trackEvent('upload-join');
@@ -183,6 +190,127 @@ function loadJoinFile(file) {
   };
 
   reader.readAsText(file);
+}
+
+// ========================================
+// Global Query State Management
+// ========================================
+
+const globalLoadBtn = document.getElementById('globalLoadBtn');
+const globalShareBtn = document.getElementById('globalShareBtn');
+const globalFileInput = document.getElementById('globalFileInput');
+
+// Initialize query state (from URL or localStorage)
+initQueryState();
+
+// Set up global load button
+globalLoadBtn.addEventListener('click', () => {
+  globalFileInput.click();
+});
+
+// Handle global file selection
+globalFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    loadGlobalFile(file);
+  }
+});
+
+// Set up global share button
+globalShareBtn.addEventListener('click', () => {
+  const url = getShareableUrl();
+  navigator.clipboard.writeText(url).then(() => {
+    // Visual feedback
+    const originalText = globalShareBtn.textContent;
+    globalShareBtn.textContent = '✓ Copied!';
+    setTimeout(() => {
+      globalShareBtn.textContent = originalText;
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy URL:', err);
+    alert('Failed to copy URL to clipboard');
+  });
+});
+
+// Load file into global state
+function loadGlobalFile(file) {
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    try {
+      const json = JSON.parse(e.target.result);
+
+      // Validate it's a query profile
+      if (!json.Query) {
+        alert('Invalid query profile format - missing "Query" field');
+        return;
+      }
+
+      // Set in global state (will trigger all listeners)
+      setQuery(json);
+
+      // Track upload
+      trackEvent('upload-global');
+
+    } catch (error) {
+      console.error('Error parsing JSON:', error);
+      alert('Error parsing JSON file: ' + error.message);
+    }
+  };
+
+  reader.readAsText(file);
+}
+
+// Listen for query state changes to update UI
+addListener((query) => {
+  if (query) {
+    // Show share button when query is loaded
+    globalShareBtn.style.display = 'block';
+
+    // Update all tabs with the new query
+    updateAllTabsWithQuery(query);
+  } else {
+    // Hide share button when no query
+    globalShareBtn.style.display = 'none';
+
+    // Clear all tabs
+    clearAllTabs();
+  }
+});
+
+// Update all tabs when query changes
+function updateAllTabsWithQuery(json) {
+  // Update Scan Summary tab
+  try {
+    const { summary, execution, connectorScans } = processQueryProfile(json);
+    renderDashboard(summary, execution, connectorScans, dropZone, dashboard);
+  } catch (error) {
+    console.error('Error updating Scan Summary tab:', error);
+  }
+
+  // Update Join Summary tab
+  try {
+    const { summary, execution, joins } = processJoinProfile(json);
+    renderJoinDashboard(summary, execution, joins, joinDropZone, joinDashboard);
+  } catch (error) {
+    console.error('Error updating Join Summary tab:', error);
+  }
+
+  // Note: Compare tab remains independent (needs two queries)
+  // Note: Plan tab updated via its own listener in visualizer.js
+}
+
+// Clear all tabs
+function clearAllTabs() {
+  // Reset Scan Summary
+  dropZone.style.display = 'block';
+  dashboard.classList.remove('visible');
+
+  // Reset Join Summary
+  joinDropZone.style.display = 'block';
+  joinDashboard.classList.remove('visible');
+
+  // Plan tab cleared via its own listener in visualizer.js
 }
 
 // ========================================
@@ -207,9 +335,17 @@ document.getElementById('joinReset').addEventListener('click', () => {
 // Initialize
 // ========================================
 
-// Initialize comparison functionality
+// Initialize comparison functionality (stays independent)
 initCompare();
 
-// Initialize plan visualization
+// Initialize plan visualization (sets up listener for global state)
 setupPlanDropZone();
+
+// On page load, if we have a query in state, load it
+// This must be AFTER setupPlanDropZone() so all listeners are registered
+if (hasQuery()) {
+  const query = getQuery();
+  updateAllTabsWithQuery(query);
+  globalShareBtn.style.display = 'block';
+}
 

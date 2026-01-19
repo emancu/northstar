@@ -18,9 +18,16 @@
        Header Section
        ======================================== -->
   <header>
-    <img src="northstar.png" alt="NorthStar Logo" class="logo-img">
-    <div class="logo">NorthStar</div>
-    <h1>Query Analyzer for StarRocks</h1>
+    <div class="header-left">
+      <img src="northstar.png" alt="NorthStar Logo" class="logo-img">
+      <div class="logo">NorthStar</div>
+      <h1>Query Analyzer for StarRocks</h1>
+    </div>
+    <div class="header-right">
+      <button class="btn-load-query" id="globalLoadBtn">📁 Load Query</button>
+      <button class="btn-share" id="globalShareBtn" style="display: none;">🔗 Share</button>
+      <input type="file" id="globalFileInput" accept=".json" style="display: none;">
+    </div>
   </header>
 
   <!-- ========================================

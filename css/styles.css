@@ -42,7 +42,20 @@ header {
   padding: 1rem 2rem;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
   gap: 1rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .logo-img {
@@ -60,6 +73,38 @@ header h1 {
   font-size: 0.9rem;
   font-weight: 400;
   color: var(--text-secondary);
+}
+
+/* Global action buttons */
+.btn-load-query,
+.btn-share {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-load-query:hover,
+.btn-share:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-primary);
+}
+
+.btn-share {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-primary);
+}
+
+.btn-share:hover {
+  opacity: 0.9;
 }
 
 /* ========================================

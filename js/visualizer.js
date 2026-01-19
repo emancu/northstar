@@ -4,6 +4,7 @@
  */
 
 import { trackEvent } from './analytics.js';
+import { setQuery, addListener, getQuery } from './queryState.js';
 
 // Tree layout constants
 const NODE_WIDTH = 160;
@@ -72,6 +73,24 @@ export function setupPlanDropZone() {
     planContainer.style.display = 'none';
     planCanvas.innerHTML = '';
   });
+
+  // Listen for global query state changes
+  addListener((query) => {
+    if (query) {
+      renderPlan(query);
+    } else {
+      // Clear the plan
+      planDropZone.style.display = 'block';
+      planContainer.style.display = 'none';
+      planCanvas.innerHTML = '';
+    }
+  });
+
+  // On init, if we have a query, render it
+  const currentQuery = getQuery();
+  if (currentQuery) {
+    renderPlan(currentQuery);
+  }
   
   // Global toggle function
   window.toggleNodeMetrics = function(nodeId, event) {
@@ -548,7 +567,16 @@ function loadPlanFile(file) {
   reader.onload = (e) => {
     try {
       const data = JSON.parse(e.target.result);
-      renderPlan(data);
+
+      // Validate it's a query profile
+      if (!data.Query) {
+        alert('Invalid query profile format - missing "Query" field');
+        return;
+      }
+
+      // Update global state (will trigger all tabs to update)
+      setQuery(data);
+
       trackEvent('upload-plan');
     } catch (err) {
       alert('Invalid JSON file');
