@@ -8,7 +8,7 @@
  */
 export async function loadFromUrl(url) {
   // Detect URL type and load accordingly
-  if (url.includes('gist.github.com') || url.includes('gist.githubusercontent.com')) {
+  if (url.includes('gist.github.com') || url.includes('gist.githubusercontent.com') || url.includes('api.github.com/gists/')) {
     return await loadFromGist(url);
   } else if (url.includes('dpaste.com')) {
     return await loadFromDpaste(url);
@@ -27,10 +27,18 @@ async function loadFromGist(url) {
   // - https://gist.github.com/username/gist_id
   // - https://gist.github.com/username/gist_id/raw/...
   // - https://gist.githubusercontent.com/username/gist_id/raw/...
+  // - https://api.github.com/gists/gist_id (API URL)
   // - https://gist.github.com/gist_id (short format)
 
-  // Match 32-character hex ID (case-insensitive)
-  let match = url.match(/gist\.github(?:usercontent)?\.com\/([a-f0-9]{32})/i);
+  let gistId = null;
+
+  // Try API URL format first
+  let match = url.match(/api\.github\.com\/gists\/([a-f0-9]{32})/i);
+
+  // Try regular Gist URLs
+  if (!match) {
+    match = url.match(/gist\.github(?:usercontent)?\.com\/([a-f0-9]{32})/i);
+  }
   if (!match) {
     match = url.match(/gist\.github(?:usercontent)?\.com\/[^/]+\/([a-f0-9]{32})/i);
   }
@@ -39,7 +47,7 @@ async function loadFromGist(url) {
     throw new Error('Invalid Gist URL format. Please provide a valid GitHub Gist URL.');
   }
 
-  const gistId = match[1].toLowerCase();
+  gistId = match[1].toLowerCase();
 
   // Always use GitHub API
   const response = await fetch(`https://api.github.com/gists/${gistId}`);
@@ -150,11 +158,16 @@ export function parseNorthStarUrl(hash) {
 
 /**
  * Extract Gist ID from any Gist URL format
- * Handles both gist.github.com and gist.githubusercontent.com
+ * Handles gist.github.com, gist.githubusercontent.com, and API URLs
  */
 export function extractGistId(url) {
-  // Match 32-character hex ID from both URL formats (case-insensitive)
-  let match = url.match(/gist\.github(?:usercontent)?\.com\/([a-f0-9]{32})/i);
+  // Try API URL format first
+  let match = url.match(/api\.github\.com\/gists\/([a-f0-9]{32})/i);
+
+  // Try regular Gist URLs
+  if (!match) {
+    match = url.match(/gist\.github(?:usercontent)?\.com\/([a-f0-9]{32})/i);
+  }
   if (!match) {
     match = url.match(/gist\.github(?:usercontent)?\.com\/[^/]+\/([a-f0-9]{32})/i);
   }

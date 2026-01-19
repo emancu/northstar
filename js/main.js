@@ -230,12 +230,14 @@ globalLoadBtn.addEventListener('click', () => {
   modalBackdrop.style.display = 'block';
 });
 
-// Close modal
+// Close modal and reset to initial state
 function closeLoadModal() {
   loadModal.style.display = 'none';
   modalBackdrop.style.display = 'none';
   urlInputContainer.style.display = 'none';
   urlInput.value = '';
+  // Reset to show load options
+  document.querySelector('.load-options').style.display = 'grid';
 }
 
 closeModal.addEventListener('click', closeLoadModal);
