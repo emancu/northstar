@@ -10,6 +10,8 @@ import { setupPlanDropZone } from './visualizer.js';
 import { processJoinProfile } from './joinParser.js';
 import { renderJoinDashboard } from './joinRender.js';
 import { trackEvent } from './analytics.js';
+import { initQueryState, getQuery, setQuery, addListener, hasQuery, getShareableUrl, getQuerySource } from './queryState.js';
+import { loadFromUrl, shareToDpaste, parseNorthStarUrl, extractGistId, extractPasteId } from './urlLoader.js';
 
 // ========================================
 // DOM Elements - Scan Summary Tab
@@ -24,6 +26,12 @@ const dashboard = document.getElementById('dashboard');
 const joinDropZone = document.getElementById('joinDropZone');
 const joinFileInput = document.getElementById('joinFileInput');
 const joinDashboard = document.getElementById('joinDashboard');
+
+// ========================================
+// DOM Elements - Raw JSON Tab
+// ========================================
+const rawJsonContent = document.getElementById('rawJsonContent');
+const btnCopyRaw = document.getElementById('btnCopyRaw');
 
 // ========================================
 // File Loading - Drag and Drop
@@ -72,27 +80,30 @@ fileInput.addEventListener('change', (e) => {
 // ========================================
 function loadFile(file) {
   const reader = new FileReader();
-  
+
   reader.onload = (e) => {
     try {
       // Parse the JSON content
       const json = JSON.parse(e.target.result);
 
-      // Process the data
-      const { summary, execution, connectorScans } = processQueryProfile(json);
+      // Validate it's a query profile
+      if (!json.Query) {
+        alert('Invalid query profile format - missing "Query" field');
+        return;
+      }
 
-      // Render the dashboard
-      renderDashboard(summary, execution, connectorScans, dropZone, dashboard);
+      // Update global state (will trigger all tabs to update)
+      setQuery(json);
 
       // Track successful upload
       trackEvent('upload-scan');
-      
+
     } catch (error) {
       console.error('Error parsing JSON:', error);
       alert('Error parsing JSON file: ' + error.message);
     }
   };
-  
+
   reader.readAsText(file);
 }
 
@@ -167,11 +178,14 @@ function loadJoinFile(file) {
       // Parse the JSON content
       const json = JSON.parse(e.target.result);
 
-      // Process the data for join analysis
-      const { summary, execution, joins } = processJoinProfile(json);
+      // Validate it's a query profile
+      if (!json.Query) {
+        alert('Invalid query profile format - missing "Query" field');
+        return;
+      }
 
-      // Render the join dashboard
-      renderJoinDashboard(summary, execution, joins, joinDropZone, joinDashboard);
+      // Update global state (will trigger all tabs to update)
+      setQuery(json);
 
       // Track successful upload
       trackEvent('upload-join');
@@ -184,6 +198,338 @@ function loadJoinFile(file) {
 
   reader.readAsText(file);
 }
+
+// ========================================
+// Global Query State Management
+// ========================================
+
+const globalLoadBtn = document.getElementById('globalLoadBtn');
+const globalShareBtn = document.getElementById('globalShareBtn');
+const globalFileInput = document.getElementById('globalFileInput');
+
+// Modal elements - Load Query
+const loadModal = document.getElementById('loadModal');
+const modalBackdrop = document.getElementById('modalBackdrop');
+const closeModal = document.getElementById('closeModal');
+const loadFromFile = document.getElementById('loadFromFile');
+const loadFromUrlBtn = document.getElementById('loadFromUrl');
+const urlInputContainer = document.getElementById('urlInputContainer');
+const urlInput = document.getElementById('urlInput');
+const btnLoadUrl = document.getElementById('btnLoadUrl');
+const btnCancelUrl = document.getElementById('btnCancelUrl');
+
+// Modal elements - Share Query
+const shareModal = document.getElementById('shareModal');
+const closeShareModal = document.getElementById('closeShareModal');
+const btnCancelShare = document.getElementById('btnCancelShare');
+const btnConfirmShare = document.getElementById('btnConfirmShare');
+
+// Set up global load button - opens modal
+globalLoadBtn.addEventListener('click', () => {
+  loadModal.style.display = 'block';
+  modalBackdrop.style.display = 'block';
+});
+
+// Close modal and reset to initial state
+function closeLoadModal() {
+  loadModal.style.display = 'none';
+  modalBackdrop.style.display = 'none';
+  urlInputContainer.style.display = 'none';
+  urlInput.value = '';
+  // Reset to show load options
+  document.querySelector('.load-options').style.display = 'grid';
+}
+
+closeModal.addEventListener('click', closeLoadModal);
+modalBackdrop.addEventListener('click', () => {
+  // Close whichever modal is open
+  if (loadModal.style.display === 'block') {
+    closeLoadModal();
+  }
+  if (shareModal.style.display === 'block') {
+    closeShareModalFn();
+  }
+});
+
+// Load from file option
+loadFromFile.addEventListener('click', () => {
+  closeLoadModal();
+  globalFileInput.click();
+});
+
+// Load from URL option
+loadFromUrlBtn.addEventListener('click', () => {
+  document.querySelector('.load-options').style.display = 'none';
+  urlInputContainer.style.display = 'block';
+  urlInput.focus();
+});
+
+// Cancel URL input
+btnCancelUrl.addEventListener('click', () => {
+  document.querySelector('.load-options').style.display = 'grid';
+  urlInputContainer.style.display = 'none';
+  urlInput.value = '';
+});
+
+// Load URL button
+btnLoadUrl.addEventListener('click', async () => {
+  const url = urlInput.value.trim();
+  if (!url) return;
+
+  try {
+    btnLoadUrl.textContent = 'Loading...';
+    btnLoadUrl.disabled = true;
+
+    const query = await loadFromUrl(url);
+
+    if (!query.Query) {
+      throw new Error('Invalid query profile format');
+    }
+
+    // Determine source type and ID
+    let source = null;
+    const gistId = extractGistId(url);
+    const pasteId = extractPasteId(url);
+
+    if (gistId) {
+      source = { type: 'gist', id: gistId, url };
+    } else if (pasteId) {
+      source = { type: 'paste', id: pasteId, url };
+    }
+
+    setQuery(query, source);
+    trackEvent('upload-url');
+    closeLoadModal();
+
+  } catch (error) {
+    console.error('Error loading from URL:', error);
+    alert(`Failed to load query: ${error.message}`);
+  } finally {
+    btnLoadUrl.textContent = 'Load';
+    btnLoadUrl.disabled = false;
+  }
+});
+
+// Handle global file selection
+globalFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    loadGlobalFile(file);
+  }
+});
+
+// Set up global share button - reuses source or creates dpaste
+globalShareBtn.addEventListener('click', async () => {
+  const query = getQuery();
+  if (!query) {
+    alert('No query loaded to share');
+    return;
+  }
+
+  const source = getQuerySource();
+  const originalText = globalShareBtn.textContent;
+
+  // If query was loaded from gist/paste, reuse that URL
+  if (source && (source.type === 'gist' || source.type === 'paste')) {
+    const shareUrl = `${window.location.origin}${window.location.pathname}#${source.type}:${source.id}`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      globalShareBtn.textContent = '✓ Link copied!';
+      setTimeout(() => {
+        globalShareBtn.textContent = originalText;
+      }, 2000);
+      trackEvent('share-reuse');
+    } catch (error) {
+      console.error('Failed to copy URL:', error);
+      alert('Failed to copy URL to clipboard');
+    }
+    return;
+  }
+
+  // Otherwise, show confirmation modal and create new dpaste
+  shareModal.style.display = 'block';
+  modalBackdrop.style.display = 'block';
+});
+
+// Close share modal handlers
+function closeShareModalFn() {
+  shareModal.style.display = 'none';
+  modalBackdrop.style.display = 'none';
+}
+
+closeShareModal.addEventListener('click', closeShareModalFn);
+btnCancelShare.addEventListener('click', closeShareModalFn);
+
+// Confirm share - create dpaste
+btnConfirmShare.addEventListener('click', async () => {
+  const query = getQuery();
+  const originalText = globalShareBtn.textContent;
+
+  try {
+    btnConfirmShare.textContent = 'Creating...';
+    btnConfirmShare.disabled = true;
+    globalShareBtn.textContent = '⏳ Creating share link...';
+    globalShareBtn.disabled = true;
+
+    // Create paste on dpaste.com
+    const pasteUrl = await shareToDpaste(query);
+
+    // Extract paste ID from URL
+    const pasteId = pasteUrl.replace('https://dpaste.com/', '').replace('.txt', '');
+
+    // Generate NorthStar URL
+    const shareUrl = `${window.location.origin}${window.location.pathname}#paste:${pasteId}`;
+
+    // Copy to clipboard
+    await navigator.clipboard.writeText(shareUrl);
+
+    globalShareBtn.textContent = '✓ Link copied!';
+    closeShareModalFn();
+
+    setTimeout(() => {
+      globalShareBtn.textContent = originalText;
+      globalShareBtn.disabled = false;
+    }, 2000);
+
+    trackEvent('share-dpaste');
+
+  } catch (error) {
+    console.error('Failed to create share link:', error);
+    alert(`Failed to create share link: ${error.message}`);
+    globalShareBtn.textContent = originalText;
+    globalShareBtn.disabled = false;
+  } finally {
+    btnConfirmShare.textContent = 'Create Share Link';
+    btnConfirmShare.disabled = false;
+  }
+});
+
+// Load file into global state
+function loadGlobalFile(file) {
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    try {
+      const json = JSON.parse(e.target.result);
+
+      // Validate it's a query profile
+      if (!json.Query) {
+        alert('Invalid query profile format - missing "Query" field');
+        return;
+      }
+
+      // Set in global state (will trigger all listeners)
+      setQuery(json);
+
+      // Track upload
+      trackEvent('upload-global');
+
+    } catch (error) {
+      console.error('Error parsing JSON:', error);
+      alert('Error parsing JSON file: ' + error.message);
+    }
+  };
+
+  reader.readAsText(file);
+}
+
+// Listen for query state changes to update UI
+addListener((query) => {
+  if (query) {
+    // Show share button when query is loaded
+    globalShareBtn.style.display = 'block';
+
+    // Update all tabs with the new query
+    updateAllTabsWithQuery(query);
+  } else {
+    // Hide share button when no query
+    globalShareBtn.style.display = 'none';
+
+    // Clear all tabs
+    clearAllTabs();
+  }
+});
+
+// Update all tabs when query changes
+function updateAllTabsWithQuery(json) {
+  // Update Scan Summary tab
+  try {
+    const { summary, execution, connectorScans } = processQueryProfile(json);
+    renderDashboard(summary, execution, connectorScans, dropZone, dashboard);
+  } catch (error) {
+    console.error('Error updating Scan Summary tab:', error);
+  }
+
+  // Update Join Summary tab
+  try {
+    const { summary, execution, joins } = processJoinProfile(json);
+    renderJoinDashboard(summary, execution, joins, joinDropZone, joinDashboard);
+  } catch (error) {
+    console.error('Error updating Join Summary tab:', error);
+  }
+
+  // Update Raw JSON tab
+  try {
+    updateRawTab(json);
+  } catch (error) {
+    console.error('Error updating Raw JSON tab:', error);
+  }
+
+  // Note: Compare tab remains independent (needs two queries)
+  // Note: Plan tab updated via its own listener in visualizer.js
+}
+
+// Update the Raw JSON tab with formatted JSON
+function updateRawTab(json) {
+  const formatted = JSON.stringify(json, null, 2);
+  rawJsonContent.innerHTML = `<code>${escapeHtml(formatted)}</code>`;
+}
+
+// Escape HTML to prevent XSS (though we control the content)
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Clear all tabs
+function clearAllTabs() {
+  // Reset Scan Summary
+  dropZone.style.display = 'block';
+  dashboard.classList.remove('visible');
+
+  // Reset Join Summary
+  joinDropZone.style.display = 'block';
+  joinDashboard.classList.remove('visible');
+
+  // Reset Raw JSON tab
+  rawJsonContent.innerHTML = '<code>No query loaded. Use the "Load Query" button above to load a query profile.</code>';
+
+  // Plan tab cleared via its own listener in visualizer.js
+}
+
+// Copy raw JSON to clipboard
+btnCopyRaw.addEventListener('click', () => {
+  const query = getQuery();
+  if (!query) {
+    alert('No query loaded to copy');
+    return;
+  }
+
+  const jsonString = JSON.stringify(query, null, 2);
+  navigator.clipboard.writeText(jsonString).then(() => {
+    // Visual feedback
+    const originalText = btnCopyRaw.textContent;
+    btnCopyRaw.textContent = '✓ Copied!';
+    setTimeout(() => {
+      btnCopyRaw.textContent = originalText;
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy JSON:', err);
+    alert('Failed to copy JSON to clipboard');
+  });
+});
 
 // ========================================
 // Reset Buttons - Load New Profile
@@ -207,9 +553,16 @@ document.getElementById('joinReset').addEventListener('click', () => {
 // Initialize
 // ========================================
 
-// Initialize comparison functionality
+// Initialize comparison functionality (stays independent)
 initCompare();
 
-// Initialize plan visualization
+// Initialize plan visualization (sets up listener for global state)
 setupPlanDropZone();
+
+// Initialize query state from URL (#gist:ID or #paste:ID)
+// This MUST be called AFTER all listeners are set up so they receive the initial state
+// It's async now because it loads from external URLs
+initQueryState().catch(err => {
+  console.error('Failed to initialize query state:', err);
+});
 
