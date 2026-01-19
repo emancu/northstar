@@ -10,8 +10,8 @@ import { setupPlanDropZone } from './visualizer.js';
 import { processJoinProfile } from './joinParser.js';
 import { renderJoinDashboard } from './joinRender.js';
 import { trackEvent } from './analytics.js';
-import { initQueryState, getQuery, setQuery, addListener, hasQuery, getShareableUrl } from './queryState.js';
-import { loadFromUrl, shareToDpaste, parseNorthStarUrl } from './urlLoader.js';
+import { initQueryState, getQuery, setQuery, addListener, hasQuery, getShareableUrl, getQuerySource } from './queryState.js';
+import { loadFromUrl, shareToDpaste, parseNorthStarUrl, extractGistId, extractPasteId } from './urlLoader.js';
 
 // ========================================
 // DOM Elements - Scan Summary Tab
@@ -270,7 +270,18 @@ btnLoadUrl.addEventListener('click', async () => {
       throw new Error('Invalid query profile format');
     }
 
-    setQuery(query);
+    // Determine source type and ID
+    let source = null;
+    const gistId = extractGistId(url);
+    const pasteId = extractPasteId(url);
+
+    if (gistId) {
+      source = { type: 'gist', id: gistId, url };
+    } else if (pasteId) {
+      source = { type: 'paste', id: pasteId, url };
+    }
+
+    setQuery(query, source);
     trackEvent('upload-url');
     closeLoadModal();
 
@@ -291,7 +302,7 @@ globalFileInput.addEventListener('change', (e) => {
   }
 });
 
-// Set up global share button - creates dpaste and copies URL
+// Set up global share button - reuses source or creates dpaste
 globalShareBtn.addEventListener('click', async () => {
   const query = getQuery();
   if (!query) {
@@ -299,7 +310,38 @@ globalShareBtn.addEventListener('click', async () => {
     return;
   }
 
+  const source = getQuerySource();
   const originalText = globalShareBtn.textContent;
+
+  // If query was loaded from gist/paste, reuse that URL
+  if (source && (source.type === 'gist' || source.type === 'paste')) {
+    const shareUrl = `${window.location.origin}${window.location.pathname}#${source.type}:${source.id}`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      globalShareBtn.textContent = '✓ Link copied!';
+      setTimeout(() => {
+        globalShareBtn.textContent = originalText;
+      }, 2000);
+      trackEvent('share-reuse');
+    } catch (error) {
+      console.error('Failed to copy URL:', error);
+      alert('Failed to copy URL to clipboard');
+    }
+    return;
+  }
+
+  // Otherwise, confirm and create new dpaste
+  const confirmed = confirm(
+    'This will create a PUBLIC paste on dpaste.com.\n\n' +
+    'Anyone with the link can view your query profile.\n' +
+    'The paste will expire after 1 year.\n\n' +
+    'Do you want to continue?'
+  );
+
+  if (!confirmed) {
+    return;
+  }
 
   try {
     globalShareBtn.textContent = '⏳ Creating share link...';

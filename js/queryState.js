@@ -13,6 +13,9 @@ import { loadFromUrl, parseNorthStarUrl } from './urlLoader.js';
 // Current query JSON
 let currentQuery = null;
 
+// Query source info (for reusing on share)
+let querySource = null; // { type: 'gist|paste', id: '...', url: '...' }
+
 // Listeners for state changes
 const listeners = [];
 
@@ -30,6 +33,7 @@ export async function initQueryState() {
       // Load from external URL (gist or paste)
       const query = await loadFromUrl(parsed.url);
       currentQuery = query;
+      querySource = parsed; // Store source for reuse
       notifyListeners();
       return true;
     }
@@ -49,12 +53,27 @@ export function getQuery() {
 
 /**
  * Set a new query (from file upload or other source)
+ * @param {Object} queryJson - The query data
+ * @param {Object} source - Optional source info { type, id, url }
  */
-export function setQuery(queryJson) {
+export function setQuery(queryJson, source = null) {
   currentQuery = queryJson;
+  querySource = source;
+
+  // Update URL if source is provided
+  if (source && (source.type === 'gist' || source.type === 'paste')) {
+    window.history.replaceState(null, '', `#${source.type}:${source.id}`);
+  }
 
   // Notify all listeners
   notifyListeners();
+}
+
+/**
+ * Get the query source (for reusing on share)
+ */
+export function getQuerySource() {
+  return querySource;
 }
 
 /**
@@ -62,6 +81,7 @@ export function setQuery(queryJson) {
  */
 export function clearQuery() {
   currentQuery = null;
+  querySource = null;
   clearHash();
   notifyListeners();
 }

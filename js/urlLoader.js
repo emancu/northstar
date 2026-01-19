@@ -22,8 +22,13 @@ export async function loadFromUrl(url) {
  * Load from GitHub Gist
  */
 async function loadFromGist(url) {
+  // Handle URLs without /raw - common mistake
+  // Convert: https://gist.github.com/user/id to use API
+  // Also handle: https://gist.github.com/user/id/raw/...
+
   // Extract gist ID from URL
-  // Format: https://gist.github.com/username/gist_id
+  // Format: https://gist.github.com/username/gist_id or
+  //         https://gist.github.com/username/gist_id/raw/...
   const match = url.match(/gist\.github\.com\/[^/]+\/([a-f0-9]+)/);
   if (!match) {
     throw new Error('Invalid Gist URL format');
@@ -31,7 +36,7 @@ async function loadFromGist(url) {
 
   const gistId = match[1];
 
-  // Fetch gist via GitHub API
+  // Always use GitHub API (handles raw/non-raw automatically)
   const response = await fetch(`https://api.github.com/gists/${gistId}`);
   if (!response.ok) {
     throw new Error(`Failed to load Gist: ${response.statusText}`);
@@ -122,7 +127,7 @@ export function parseNorthStarUrl(hash) {
     return {
       type: 'gist',
       id: gistId,
-      url: `https://gist.github.com/${gistId}` // Will need to fetch to get full URL
+      url: `https://api.github.com/gists/${gistId}` // Use API URL
     };
   }
 
@@ -136,4 +141,20 @@ export function parseNorthStarUrl(hash) {
   }
 
   return null;
+}
+
+/**
+ * Extract Gist ID from any Gist URL format
+ */
+export function extractGistId(url) {
+  const match = url.match(/gist\.github\.com\/[^/]+\/([a-f0-9]+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Extract paste ID from dpaste URL
+ */
+export function extractPasteId(url) {
+  const match = url.match(/dpaste\.com\/([a-zA-Z0-9]+)/);
+  return match ? match[1] : null;
 }
