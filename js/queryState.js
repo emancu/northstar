@@ -90,24 +90,27 @@ function notifyListeners() {
 }
 
 /**
- * Update URL hash with current query
- * Uses LZ-String compression + URI encoding for short URLs
+ * Encode JSON to URL-safe base64
  */
-function updateHash() {
-  if (!currentQuery) {
-    clearHash();
-    return;
-  }
+function encodeQuery(json) {
+  const jsonString = JSON.stringify(json);
+  const base64 = btoa(jsonString);
+  // Make URL-safe
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
-  try {
-    const jsonString = JSON.stringify(currentQuery);
-    // Use LZString compression (like Excalidraw) for much shorter URLs
-    const compressed = LZString.compressToEncodedURIComponent(jsonString);
-    window.history.replaceState(null, '', `#${URL_HASH_PREFIX}${compressed}`);
-  } catch (error) {
-    console.error('Failed to encode query in URL:', error);
-    clearHash();
+/**
+ * Decode URL-safe base64 to JSON
+ */
+function decodeQuery(encoded) {
+  // Restore standard base64
+  let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+  // Add padding
+  while (base64.length % 4) {
+    base64 += '=';
   }
+  const jsonString = atob(base64);
+  return JSON.parse(jsonString);
 }
 
 /**
@@ -120,17 +123,8 @@ function loadFromHash() {
       return null;
     }
 
-    const compressed = hash.substring(URL_HASH_PREFIX.length + 1);
-
-    // Decompress using LZString
-    const jsonString = LZString.decompressFromEncodedURIComponent(compressed);
-
-    if (!jsonString) {
-      console.error('Failed to decompress query from URL');
-      return null;
-    }
-
-    return JSON.parse(jsonString);
+    const encoded = hash.substring(URL_HASH_PREFIX.length + 1);
+    return decodeQuery(encoded);
   } catch (error) {
     console.error('Failed to decode query from URL:', error);
     return null;
@@ -159,11 +153,9 @@ export function getShareableUrl() {
     return window.location.origin + window.location.pathname;
   }
 
-  // Manually construct URL with hash to ensure it's current
   try {
-    const jsonString = JSON.stringify(currentQuery);
-    const compressed = LZString.compressToEncodedURIComponent(jsonString);
-    return `${window.location.origin}${window.location.pathname}#${URL_HASH_PREFIX}${compressed}`;
+    const encoded = encodeQuery(currentQuery);
+    return `${window.location.origin}${window.location.pathname}#${URL_HASH_PREFIX}${encoded}`;
   } catch (error) {
     console.error('Failed to generate shareable URL:', error);
     return window.location.origin + window.location.pathname;
