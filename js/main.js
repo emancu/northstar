@@ -121,12 +121,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
  */
 function getCurrentTab() {
   const activeBtn = document.querySelector('.tab-btn.active');
-  return activeBtn ? activeBtn.dataset.tab : 'single';
+  return activeBtn ? activeBtn.dataset.tab : 'scan';
 }
 
 /**
  * Switch to a specific tab by ID
- * Valid tabs: single, join, plan, raw, compare
+ * Valid tabs: scan, join, plan, raw, compare
  */
 function switchToTab(tabId) {
   const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
