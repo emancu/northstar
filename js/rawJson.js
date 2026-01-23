@@ -1,5 +1,5 @@
 /**
- * Raw JSON Tab - Display and search functionality
+ * Raw JSON Tab - Display, search, and collapsible tree functionality
  */
 
 import { getQuery } from './queryState.js';
@@ -14,11 +14,13 @@ const rawSearchCount = document.getElementById('rawSearchCount');
 const rawSearchPrev = document.getElementById('rawSearchPrev');
 const rawSearchNext = document.getElementById('rawSearchNext');
 
-// Search state
+// State
 let rawJsonText = '';
+let currentJson = null;
 let searchMatches = [];
 let currentMatchIndex = -1;
 let searchTimeout;
+let isTreeView = true;
 
 /**
  * Initialize Raw JSON tab event listeners
@@ -71,6 +73,9 @@ export function initRawJson() {
   // Navigation buttons
   rawSearchPrev.addEventListener('click', () => navigateMatch(-1));
   rawSearchNext.addEventListener('click', () => navigateMatch(1));
+
+  // Delegate click events for tree toggle
+  rawJsonContent.addEventListener('click', handleTreeClick);
 }
 
 /**
@@ -79,7 +84,10 @@ export function initRawJson() {
 export function updateRawTab(json) {
   const formatted = JSON.stringify(json, null, 2);
   rawJsonText = formatted;
-  rawJsonContent.innerHTML = `<code>${escapeHtml(formatted)}</code>`;
+  currentJson = json;
+  isTreeView = true;
+
+  renderTreeView(json);
   clearSearchState();
 
   // Show container, hide drop zone
@@ -92,6 +100,7 @@ export function updateRawTab(json) {
  */
 export function clearRawTab() {
   rawJsonText = '';
+  currentJson = null;
   rawJsonContent.innerHTML = '<code></code>';
   clearSearchState();
 
@@ -112,7 +121,117 @@ export function searchFor(term) {
 }
 
 // ========================================
-// Private functions
+// Tree View Rendering
+// ========================================
+
+/**
+ * Render JSON as a collapsible tree
+ */
+function renderTreeView(json) {
+  const html = renderValue(json, '', 0, true);
+  rawJsonContent.innerHTML = `<code class="json-tree">${html}</code>`;
+}
+
+/**
+ * Render a JSON value (recursive)
+ */
+function renderValue(value, key, depth, isLast) {
+  const indent = '  '.repeat(depth);
+  const keyHtml = key ? `<span class="json-key">"${escapeHtml(key)}"</span>: ` : '';
+  const comma = isLast ? '' : ',';
+
+  if (value === null) {
+    return `${indent}${keyHtml}<span class="json-null">null</span>${comma}\n`;
+  }
+
+  if (typeof value === 'boolean') {
+    return `${indent}${keyHtml}<span class="json-boolean">${value}</span>${comma}\n`;
+  }
+
+  if (typeof value === 'number') {
+    return `${indent}${keyHtml}<span class="json-number">${value}</span>${comma}\n`;
+  }
+
+  if (typeof value === 'string') {
+    // Truncate very long strings in display (full value still in data attribute)
+    const displayStr = value.length > 500 ? value.substring(0, 500) + '...' : value;
+    return `${indent}${keyHtml}<span class="json-string">"${escapeHtml(displayStr)}"</span>${comma}\n`;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return `${indent}${keyHtml}<span class="json-bracket">[]</span>${comma}\n`;
+    }
+
+    const id = generateId();
+    const preview = `Array(${value.length})`;
+    let html = `${indent}${keyHtml}<span class="json-toggle" data-id="${id}">▼</span> <span class="json-bracket">[</span> <span class="json-preview">${preview}</span>\n`;
+    html += `<span class="json-collapsible" data-id="${id}">`;
+
+    value.forEach((item, index) => {
+      html += renderValue(item, '', depth + 1, index === value.length - 1);
+    });
+
+    html += `${indent}<span class="json-bracket">]</span>${comma}</span>\n`;
+    return html;
+  }
+
+  if (typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (keys.length === 0) {
+      return `${indent}${keyHtml}<span class="json-bracket">{}</span>${comma}\n`;
+    }
+
+    const id = generateId();
+    // Create a preview of first few keys
+    const previewKeys = keys.slice(0, 3).map(k => `"${k}"`).join(', ');
+    const preview = keys.length > 3 ? `${previewKeys}, ...` : previewKeys;
+
+    let html = `${indent}${keyHtml}<span class="json-toggle" data-id="${id}">▼</span> <span class="json-bracket">{</span> <span class="json-preview">${escapeHtml(preview)}</span>\n`;
+    html += `<span class="json-collapsible" data-id="${id}">`;
+
+    keys.forEach((k, index) => {
+      html += renderValue(value[k], k, depth + 1, index === keys.length - 1);
+    });
+
+    html += `${indent}<span class="json-bracket">}</span>${comma}</span>\n`;
+    return html;
+  }
+
+  return `${indent}${keyHtml}${escapeHtml(String(value))}${comma}\n`;
+}
+
+let idCounter = 0;
+function generateId() {
+  return `json-node-${idCounter++}`;
+}
+
+/**
+ * Handle click on tree toggle
+ */
+function handleTreeClick(e) {
+  const toggle = e.target.closest('.json-toggle');
+  if (!toggle) return;
+
+  const id = toggle.dataset.id;
+  const collapsible = rawJsonContent.querySelector(`.json-collapsible[data-id="${id}"]`);
+  if (!collapsible) return;
+
+  const isCollapsed = collapsible.classList.contains('collapsed');
+
+  if (isCollapsed) {
+    collapsible.classList.remove('collapsed');
+    toggle.textContent = '▼';
+    toggle.classList.remove('collapsed');
+  } else {
+    collapsible.classList.add('collapsed');
+    toggle.textContent = '▶';
+    toggle.classList.add('collapsed');
+  }
+}
+
+// ========================================
+// Search Functions
 // ========================================
 
 function clearSearchState() {
@@ -144,12 +263,18 @@ function handleCopy() {
 
 function performSearch(query) {
   if (!rawJsonText || !query) {
-    rawJsonContent.innerHTML = `<code>${escapeHtml(rawJsonText || '')}</code>`;
+    // Restore tree view when search is cleared
+    if (currentJson) {
+      renderTreeView(currentJson);
+    }
     rawSearchCount.textContent = '';
     searchMatches = [];
     currentMatchIndex = -1;
     return;
   }
+
+  // Switch to flat view for search (easier to highlight matches)
+  isTreeView = false;
 
   // Find all matches (case-insensitive)
   const regex = new RegExp(escapeRegex(query), 'gi');

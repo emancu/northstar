@@ -1589,6 +1589,73 @@ td.rows {
   color: inherit;
 }
 
+/* JSON Tree View */
+.json-tree {
+  display: block;
+}
+
+.json-key {
+  color: var(--info);
+}
+
+.json-string {
+  color: var(--success);
+}
+
+.json-number {
+  color: var(--warning);
+}
+
+.json-boolean {
+  color: var(--accent);
+}
+
+.json-null {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.json-bracket {
+  color: var(--text-secondary);
+}
+
+.json-toggle {
+  cursor: pointer;
+  user-select: none;
+  color: var(--accent);
+  font-size: 0.7em;
+  display: inline-block;
+  width: 1em;
+  transition: transform 0.15s ease;
+}
+
+.json-toggle:hover {
+  color: var(--info);
+}
+
+.json-toggle.collapsed {
+  transform: rotate(0deg);
+}
+
+.json-preview {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.json-collapsible {
+  display: inline;
+}
+
+.json-collapsible.collapsed {
+  display: none;
+}
+
+.json-collapsible.collapsed + .json-bracket {
+  display: none;
+}
+
 /* ========================================
    Modal Styles
    ======================================== */
