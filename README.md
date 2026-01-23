@@ -13,7 +13,7 @@ Analyze CONNECTOR_SCAN operators with detailed metrics:
 - Memory usage and allocation
 - Read throughput and bytes read
 - Row counts and timing breakdowns
-- Sortable table with all scan operators
+- Sortable table with sticky column headers
 
 ### Join Summary
 Analyze HASH_JOIN operators including:
@@ -22,31 +22,45 @@ Analyze HASH_JOIN operators including:
 - Row counts for both sides of joins
 - Broadcast join detection
 
+### Query Plan
+Visualize the query execution plan:
+- Interactive tree view with pan and zoom
+- Expandable nodes with detailed metrics
+- Color-coded operator types (scan, join, exchange, etc.)
+- Row count labels on edges
+- Minimap for navigation
+
+### Raw JSON
+View and search the raw query profile:
+- Searchable JSON viewer with highlighting
+- Keyboard navigation (Enter/Shift+Enter)
+- Copy to clipboard
+
 ### Query Comparison
 Compare two query profiles side-by-side:
 - Memory usage comparison
 - Time improvement analysis
-- Scan metrics deltas
-- Join metrics deltas
+- Scan and join metrics deltas
 - Visual indicators for improvements/regressions
 
-### Query Plan
-Visualize the query execution plan:
-- Tree view of operator hierarchy
-- Fragment and pipeline structure
-- Interactive plan exploration
+### Additional Features
+- **Dark/Light Theme**: Toggle between themes with the Nord color palette
+- **URL Sharing**: Share query profiles via GitHub Gist or dpaste links
+- **Global Query Loading**: Load once, analyze across all tabs
 
 ## Usage
 
 1. Open the application in a web browser
-2. Select a tab based on what you want to analyze
-3. Drag and drop a StarRocks query profile JSON file (or click to browse)
-4. For Query Comparison, load both a baseline and optimized profile
+2. Click "Load Query" or drag and drop a StarRocks query profile JSON
+3. Switch between tabs to analyze different aspects
+4. Use the theme toggle (sun/moon icon) to switch between dark and light mode
+5. Click "Share" to generate a shareable link
 
 ## Tech Stack
 
 - **Vanilla JavaScript** (ES6 modules)
 - **HTML5** / **CSS3**
+- **Nord Theme** color palette
 - No build tools or external dependencies
 
 ## Project Structure
@@ -55,16 +69,20 @@ Visualize the query execution plan:
 northstar/
 ├── index.html          # Single HTML file with all tab structures
 ├── css/
-│   └── styles.css      # All styles (CSS variables, components, tabs)
+│   └── styles.css      # Nord theme, CSS variables, components
 ├── js/
 │   ├── main.js         # Entry point, tab navigation, file loading
-│   ├── utils.js        # Shared utilities
+│   ├── utils.js        # Shared utilities (parsing, formatting)
 │   ├── scanParser.js   # CONNECTOR_SCAN operator parsing
 │   ├── scanRender.js   # Scan Summary tab rendering
 │   ├── joinParser.js   # HASH_JOIN operator parsing
 │   ├── joinRender.js   # Join Summary tab rendering
 │   ├── visualizer.js   # Query Plan tree visualization
-│   └── compare.js      # Query Comparison tab
+│   ├── compare.js      # Query Comparison tab
+│   ├── rawJson.js      # Raw JSON viewer with search
+│   ├── theme.js        # Dark/light theme management
+│   ├── queryState.js   # Global query state management
+│   └── urlLoader.js    # URL sharing (Gist, dpaste)
 └── test_profiles/      # Sample query profile JSON files
 ```
 
@@ -77,3 +95,7 @@ For local development with a server:
 python -m http.server 8000
 # Then open http://localhost:8000
 ```
+
+## License
+
+MIT

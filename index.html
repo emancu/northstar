@@ -4,12 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NorthStar - Query Analyzer for StarRocks</title>
-  
+  <link rel="icon" type="image/png" href="northstar_dark.png">
+
   <!-- Google Font: JetBrains Mono for that data/code feel -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   
+  <!-- Theme initialization (prevents flash of wrong theme) -->
+  <script>
+    (function() {
+      const saved = localStorage.getItem('northstar-theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
+    })();
+  </script>
+
   <!-- Styles -->
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -18,34 +28,106 @@
        Header Section
        ======================================== -->
   <header>
-    <img src="northstar.png" alt="NorthStar Logo" class="logo-img">
-    <div class="logo">NorthStar</div>
-    <h1>Query Analyzer for StarRocks</h1>
+    <div class="header-left">
+      <a href="./" class="logo-link" id="logoLink">
+        <img src="northstar_dark.png" alt="NorthStar Logo" class="logo-img">
+        <div class="logo">NorthStar</div>
+      </a>
+      <h1>Query Analyzer for StarRocks</h1>
+    </div>
+    <div class="header-right">
+      <button class="btn-load-query" id="globalLoadBtn">Load Query</button>
+      <button class="btn-share" id="globalShareBtn" style="display: none;">Share</button>
+      <input type="file" id="globalFileInput" accept=".json" style="display: none;">
+      <button class="btn-theme-toggle" id="themeToggle" title="Toggle theme">
+        <span class="theme-icon-dark">☀️</span>
+        <span class="theme-icon-light">🌙</span>
+      </button>
+    </div>
   </header>
+
+  <!-- Load Query Modal -->
+  <div class="modal" id="loadModal" style="display: none;">
+    <div class="modal-content">
+      <h2>Load Query Profile</h2>
+      <div class="load-options">
+        <button class="load-option-btn" id="loadFromFile">
+          <span class="load-icon">📁</span>
+          <span class="load-label">Upload File</span>
+          <span class="load-desc">Load from your computer</span>
+        </button>
+        <button class="load-option-btn" id="loadFromUrl">
+          <span class="load-icon">🔗</span>
+          <span class="load-label">Load from URL</span>
+          <span class="load-desc">GitHub Gist or Paste URL</span>
+        </button>
+      </div>
+      <div class="url-input-container" id="urlInputContainer" style="display: none;">
+        <input type="text" id="urlInput" placeholder="https://gist.github.com/... or https://dpaste.com/...">
+        <div class="url-actions">
+          <button class="btn-cancel" id="btnCancelUrl">Cancel</button>
+          <button class="btn-load" id="btnLoadUrl">Load</button>
+        </div>
+      </div>
+      <button class="modal-close" id="closeModal">×</button>
+    </div>
+  </div>
+
+  <!-- Share Modal -->
+  <div class="modal" id="shareModal" style="display: none;">
+    <div class="modal-content">
+      <h2>Share Query Profile</h2>
+      <div class="share-warning">
+        <div class="warning-icon">⚠️</div>
+        <div class="warning-text">
+          <p><strong>This will create a PUBLIC paste on dpaste.com</strong></p>
+          <p>Anyone with the link can view your query profile.</p>
+          <p>The paste will expire after 1 year.</p>
+        </div>
+      </div>
+      <div class="share-actions">
+        <button class="btn-cancel" id="btnCancelShare">Cancel</button>
+        <button class="btn-confirm" id="btnConfirmShare">Create Share Link</button>
+      </div>
+      <button class="modal-close" id="closeShareModal">×</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalBackdrop" style="display: none;"></div>
+
+  <!-- Loading overlay for URL loading -->
+  <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+    <div class="loading-content">
+      <img src="northstar_dark.png" alt="Loading..." class="loading-logo loading-logo-dark">
+      <img src="northstar_light.png" alt="Loading..." class="loading-logo loading-logo-light">
+      <p id="loadingMessage">Loading query...</p>
+    </div>
+  </div>
 
   <!-- ========================================
        Tab Navigation
        ======================================== -->
   <nav class="tab-nav">
-    <button class="tab-btn active" data-tab="single">Scan Summary</button>
+    <button class="tab-btn active" data-tab="scan">Scan Summary</button>
     <button class="tab-btn" data-tab="join">Join Summary</button>
-    <button class="tab-btn" data-tab="compare">Query Comparison</button>
     <button class="tab-btn" data-tab="plan">Query Plan</button>
+    <button class="tab-btn" data-tab="raw">Raw JSON</button>
+    <button class="tab-btn" data-tab="compare">Query Comparison</button>
   </nav>
 
   <!-- ========================================
        Main Content
        ======================================== -->
   <main>
-    <!-- ====== SINGLE QUERY TAB ====== -->
-    <div class="tab-panel active" id="tab-single">
+    <!-- ====== SCAN SUMMARY TAB ====== -->
+    <div class="tab-panel active" id="tab-scan">
       <!-- Drop Zone: Visible initially for file upload -->
       <div class="drop-zone" id="dropZone">
-      <div class="drop-zone-icon">📁</div>
-      <h2>Drop your query profile JSON here</h2>
-      <p>or click to browse files</p>
-      <input type="file" id="fileInput" accept=".json">
-    </div>
+        <div class="drop-zone-icon">📁</div>
+        <h2>Drop your query profile JSON here</h2>
+        <p>or click to load query</p>
+        <input type="file" id="fileInput" accept=".json">
+      </div>
 
     <!-- Dashboard: Hidden until a file is loaded -->
     <div class="dashboard" id="dashboard">
@@ -54,7 +136,6 @@
       <section class="query-info">
         <div class="query-info-header">
           <h2>Query Information</h2>
-          <button class="btn-reset" id="scanReset">Load Different Profile</button>
         </div>
         <div class="query-meta" id="queryMeta">
           <!-- Populated by JavaScript -->
@@ -102,15 +183,15 @@
         </div>
       </section>
     </div>
-    </div> <!-- End of tab-single -->
+    </div> <!-- End of tab-scan -->
 
     <!-- ====== JOIN SUMMARY TAB ====== -->
     <div class="tab-panel" id="tab-join">
       <!-- Drop Zone: Visible initially for file upload -->
       <div class="drop-zone" id="joinDropZone">
-        <div class="drop-zone-icon">🔗</div>
+        <div class="drop-zone-icon">📁</div>
         <h2>Drop your query profile JSON here</h2>
-        <p>or click to browse files</p>
+        <p>or click to load query</p>
         <input type="file" id="joinFileInput" accept=".json">
       </div>
 
@@ -121,7 +202,6 @@
         <section class="query-info">
           <div class="query-info-header">
             <h2>Query Information</h2>
-            <button class="btn-reset" id="joinReset">Load Different Profile</button>
           </div>
           <div class="query-meta" id="joinQueryMeta">
             <!-- Populated by JavaScript -->
@@ -171,11 +251,13 @@
         <div class="compare-drop baseline" id="compareDropBaseline">
           <h3>📊 Baseline Query</h3>
           <p>Drop the original query profile</p>
+          <p class="load-url-link" id="loadUrlBaseline">or Load from URL</p>
           <input type="file" id="compareFileBaseline" accept=".json">
         </div>
         <div class="compare-drop optimized" id="compareDropOptimized">
           <h3>🚀 Optimized Query</h3>
           <p>Drop the optimized query profile</p>
+          <p class="load-url-link" id="loadUrlOptimized">or Load from URL</p>
           <input type="file" id="compareFileOptimized" accept=".json">
         </div>
       </div>
@@ -224,9 +306,9 @@
     <div class="tab-panel" id="tab-plan">
       <!-- Drop Zone for Plan -->
       <div class="drop-zone" id="planDropZone">
-        <div class="drop-zone-icon">🗺️</div>
-        <h3>Drop Query Profile JSON</h3>
-        <p>Drag & drop a profile to visualize the execution plan</p>
+        <div class="drop-zone-icon">📁</div>
+        <h2>Drop your query profile JSON here</h2>
+        <p>or click to load query</p>
         <input type="file" id="planFileInput" accept=".json">
       </div>
 
@@ -234,7 +316,6 @@
       <div class="plan-container" id="planContainer" style="display: none;">
         <div class="plan-header">
           <h3>Execution Plan</h3>
-          <button class="btn-reset" id="planReset">Load Different Profile</button>
         </div>
         <div class="plan-canvas" id="planCanvas">
           <!-- zoom-container will be injected by JS with graph content -->
@@ -263,6 +344,36 @@
             <div class="minimap-nodes"></div>
             <div class="minimap-viewport"></div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== RAW JSON TAB ====== -->
+    <div class="tab-panel" id="tab-raw">
+      <!-- Drop Zone for Raw JSON -->
+      <div class="drop-zone" id="rawDropZone">
+        <div class="drop-zone-icon">📁</div>
+        <h2>Drop your query profile JSON here</h2>
+        <p>or click to load query</p>
+        <input type="file" id="rawFileInput" accept=".json">
+      </div>
+
+      <!-- Raw JSON Container (hidden until file loaded) -->
+      <div class="raw-container" id="rawContainer" style="display: none;">
+        <div class="raw-header">
+          <h2>Raw Query JSON</h2>
+          <div class="raw-header-actions">
+            <div class="raw-search">
+              <input type="text" id="rawSearchInput" placeholder="Search JSON..." />
+              <span class="search-count" id="rawSearchCount"></span>
+              <button class="btn-search-nav" id="rawSearchPrev" title="Previous">&#9650;</button>
+              <button class="btn-search-nav" id="rawSearchNext" title="Next">&#9660;</button>
+            </div>
+            <button class="btn-copy-raw" id="btnCopyRaw">Copy to Clipboard</button>
+          </div>
+        </div>
+        <div class="raw-content">
+          <pre id="rawJsonContent"><code></code></pre>
         </div>
       </div>
     </div>
