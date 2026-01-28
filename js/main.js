@@ -9,12 +9,24 @@ import { initCompare, hasCompareData, getCompareRawJson, getCompareSource, setCo
 import { setupPlanDropZone, refreshPlanView, zoomToNode } from './visualizer.js';
 import { processJoinProfile } from './joinParser.js';
 import { renderJoinDashboard } from './joinRender.js';
+import { processOverview } from './overviewParser.js';
+import { renderOverview, clearOverview } from './overviewRender.js';
 import { trackEvent } from './analytics.js';
 import { initQueryState, getQuery, setQuery, clearQuery, addListener, hasQuery, getShareableUrl, getQuerySource } from './queryState.js';
 import { loadFromUrl, shareToDpaste, parseNorthStarUrl, extractGistId, extractPasteId, buildQueryUrl, buildCompareUrl } from './urlLoader.js';
 import { initRawJson, updateRawTab, clearRawTab, searchFor } from './rawJson.js';
 import { initTheme } from './theme.js';
 import { initTooltips } from './utils.js';
+
+// Make zoomToNode available globally for overview tab
+window.zoomToNode = zoomToNode;
+
+// ========================================
+// DOM Elements - Overview Tab
+// ========================================
+const overviewDropZone = document.getElementById('overviewDropZone');
+const overviewFileInput = document.getElementById('overviewFileInput');
+const overviewDashboard = document.getElementById('overviewDashboard');
 
 // ========================================
 // DOM Elements - Scan Summary Tab
@@ -31,7 +43,41 @@ const joinFileInput = document.getElementById('joinFileInput');
 const joinDashboard = document.getElementById('joinDashboard');
 
 // ========================================
-// File Loading - Drag and Drop
+// File Loading - Drag and Drop (Overview Tab)
+// ========================================
+
+// Overview drop zone handlers
+overviewDropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  overviewDropZone.classList.add('drag-over');
+});
+
+overviewDropZone.addEventListener('dragleave', () => {
+  overviewDropZone.classList.remove('drag-over');
+});
+
+overviewDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  overviewDropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.json')) {
+    loadFile(file);
+  } else {
+    alert('Please drop a JSON file');
+  }
+});
+
+overviewDropZone.addEventListener('click', () => {
+  showLoadModal();
+});
+
+overviewFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) loadFile(file);
+});
+
+// ========================================
+// File Loading - Drag and Drop (Scan Tab)
 // ========================================
 
 // When user drags a file over the drop zone
@@ -49,7 +95,7 @@ dropZone.addEventListener('dragleave', () => {
 dropZone.addEventListener('drop', (e) => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
-  
+
   // Get the dropped file (we only care about the first one)
   const file = e.dataTransfer.files[0];
   if (file && file.name.endsWith('.json')) {
@@ -92,8 +138,8 @@ function loadFile(file) {
       // Update global state (will trigger all tabs to update)
       setQuery(json);
 
-      // Track successful upload
-      trackEvent('upload-scan');
+      // Track successful upload based on current tab
+      trackEvent(`upload-${getCurrentTab()}`);
 
     } catch (error) {
       console.error('Error parsing JSON:', error);
@@ -118,7 +164,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
  */
 function getCurrentTab() {
   const activeBtn = document.querySelector('.tab-btn.active');
-  return activeBtn ? activeBtn.dataset.tab : 'scan';
+  return activeBtn ? activeBtn.dataset.tab : 'overview';
 }
 
 /**
@@ -273,7 +319,7 @@ document.getElementById('logoLink').addEventListener('click', (e) => {
   // Navigate to clean URL (removes query params)
   window.history.replaceState(null, '', window.location.pathname);
   // Switch to default tab
-  switchToTab('scan');
+  switchToTab('overview');
 });
 
 // Expose showLoadModal globally for other modules
@@ -584,6 +630,14 @@ addListener((query) => {
 
 // Update all tabs when query changes
 function updateAllTabsWithQuery(json) {
+  // Update Overview tab
+  try {
+    const { summary, analysis } = processOverview(json);
+    renderOverview(summary, analysis, overviewDropZone, overviewDashboard);
+  } catch (error) {
+    console.error('Error updating Overview tab:', error);
+  }
+
   // Update Scan Summary tab
   try {
     const { summary, execution, connectorScans } = processQueryProfile(json);
@@ -620,6 +674,9 @@ function updateAllTabsWithQuery(json) {
 
 // Clear all tabs
 function clearAllTabs() {
+  // Reset Overview tab
+  clearOverview();
+
   // Reset Scan Summary - use classList to match how renderDashboard hides it
   dropZone.classList.remove('hidden');
   dashboard.classList.remove('visible');
@@ -714,6 +771,18 @@ window.navigateToRawJsonNode = function(planNodeId, operatorType = 'scan') {
       ? `HASH_JOIN_PROBE (plan_node_id=${planNodeId})`
       : `CONNECTOR_SCAN (plan_node_id=${planNodeId})`;
     searchFor(searchTerm);
+  }, 100);
+};
+
+/**
+ * Navigate to Raw JSON tab and search for an operator by name
+ * @param {string} operatorName - The full operator name (e.g., "HASH_JOIN_BUILD (plan_node_id=5)")
+ */
+window.searchOperatorInRaw = function(operatorName) {
+  trackEvent('overview-operator-drilldown');
+  switchToTab('raw');
+  setTimeout(() => {
+    searchFor(operatorName);
   }, 100);
 };
 
