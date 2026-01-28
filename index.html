@@ -108,7 +108,8 @@
        Tab Navigation
        ======================================== -->
   <nav class="tab-nav">
-    <button class="tab-btn active" data-tab="scan">Scan Summary</button>
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="scan">Scan Summary</button>
     <button class="tab-btn" data-tab="join">Join Summary</button>
     <button class="tab-btn" data-tab="plan">Query Plan</button>
     <button class="tab-btn" data-tab="raw">Raw JSON</button>
@@ -119,8 +120,53 @@
        Main Content
        ======================================== -->
   <main>
+    <!-- ====== OVERVIEW TAB ====== -->
+    <div class="tab-panel active" id="tab-overview">
+      <!-- Drop Zone for Overview -->
+      <div class="drop-zone" id="overviewDropZone">
+        <div class="drop-zone-icon">📁</div>
+        <h2>Drop your query profile JSON here</h2>
+        <p>or click to load query</p>
+        <input type="file" id="overviewFileInput" accept=".json">
+      </div>
+
+      <!-- Overview Dashboard (hidden until file loaded) -->
+      <div class="dashboard" id="overviewDashboard">
+        <!-- Query Summary -->
+        <section class="query-info">
+          <div class="query-info-header">
+            <h2>Query Summary</h2>
+          </div>
+          <div class="query-meta" id="overviewQueryMeta">
+            <!-- Populated by JavaScript -->
+          </div>
+        </section>
+
+        <!-- Pipeline Timeline -->
+        <section class="pipeline-timeline" id="pipelineTimeline">
+          <h3 class="section-header">Pipeline Timeline <span class="section-subtitle">(by Active Time)</span></h3>
+          <div class="timeline-legend">
+            <span class="legend-item"><span class="legend-color active"></span> Active</span>
+            <span class="legend-item"><span class="legend-color schedule"></span> Schedule</span>
+            <span class="legend-item"><span class="legend-color waiting"></span> Waiting</span>
+          </div>
+          <div class="timeline-container" id="timelineContainer">
+            <!-- Populated by JavaScript -->
+          </div>
+        </section>
+
+        <!-- Quick Stats -->
+        <section class="quick-stats" id="quickStats">
+          <h3 class="section-header">Execution Stats</h3>
+          <div class="quick-stats-grid" id="quickStatsGrid">
+            <!-- Populated by JavaScript -->
+          </div>
+        </section>
+      </div>
+    </div>
+
     <!-- ====== SCAN SUMMARY TAB ====== -->
-    <div class="tab-panel active" id="tab-scan">
+    <div class="tab-panel" id="tab-scan">
       <!-- Drop Zone: Visible initially for file upload -->
       <div class="drop-zone" id="dropZone">
         <div class="drop-zone-icon">📁</div>
