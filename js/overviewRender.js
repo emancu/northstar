@@ -16,10 +16,13 @@ export function renderOverview(summary, analysis, dropZone, dashboard) {
   // 1. Render Query Summary
   renderQuerySummary(summary, analysis);
 
-  // 2. Render Pipeline Timeline
+  // 2. Render Planning vs Execution bar (if planner data available)
+  renderPlanningBar(analysis);
+
+  // 3. Render Pipeline Timeline
   renderPipelineTimeline(analysis);
 
-  // 3. Render Quick Stats
+  // 4. Render Quick Stats
   renderQuickStats(analysis);
 }
 
@@ -44,6 +47,56 @@ function renderQuerySummary(summary, analysis) {
       <span>${f.value || 'N/A'}</span>
     </div>
   `).join('');
+}
+
+/**
+ * Render Planning vs Execution bar
+ */
+function renderPlanningBar(analysis) {
+  const container = document.getElementById('planningBarContainer');
+  if (!container) return;
+
+  const planner = analysis.plannerTiming;
+  if (!planner) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+
+  const planningTime = planner.total;
+  const executionTime = analysis.queryWallTime * 1000; // Convert to ms
+  const totalTime = planningTime + executionTime;
+
+  if (totalTime === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  const planningPct = (planningTime / totalTime) * 100;
+  const executionPct = (executionTime / totalTime) * 100;
+
+  // Format times for display
+  const formatMs = (ms) => {
+    if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
+    return ms.toFixed(0) + 'ms';
+  };
+
+  // Determine if planning time is concerning (>30% of total)
+  const planningWarning = planningPct > 30;
+
+  container.innerHTML = `
+    <div class="planning-bar-wrapper">
+      <div class="planning-bar-labels">
+        <span class="planning-label${planningWarning ? ' warning' : ''}">Planning: ${formatMs(planningTime)} (${planningPct.toFixed(0)}%)</span>
+        <span class="execution-label">Execution: ${formatMs(executionTime)} (${executionPct.toFixed(0)}%)</span>
+      </div>
+      <div class="planning-bar">
+        <div class="planning-segment planning" style="width: ${planningPct}%" title="Planning: ${formatMs(planningTime)}"></div>
+        <div class="planning-segment execution" style="width: ${executionPct}%" title="Execution: ${formatMs(executionTime)}"></div>
+      </div>
+    </div>
+  `;
 }
 
 /**
@@ -206,9 +259,13 @@ export function clearOverview() {
   if (dashboard) dashboard.classList.remove('visible');
 
   // Clear all content
-  const containers = ['overviewQueryMeta', 'timelineContainer', 'quickStatsGrid'];
+  const containers = ['overviewQueryMeta', 'planningBarContainer', 'timelineContainer', 'quickStatsGrid'];
   containers.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = '';
   });
+
+  // Hide planning bar
+  const planningBar = document.getElementById('planningBarContainer');
+  if (planningBar) planningBar.style.display = 'none';
 }

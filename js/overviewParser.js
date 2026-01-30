@@ -95,6 +95,52 @@ export function analyzeFragments(fragments, execution) {
 }
 
 /**
+ * Extract planner timing data
+ * Parses keys like "-- Total[1] 57ms": "" to extract timing values
+ */
+function extractPlannerTiming(planner) {
+  if (!planner || typeof planner !== 'object') {
+    return null;
+  }
+
+  const timing = {
+    total: 0,
+    analyzer: 0,
+    transformer: 0,
+    optimizer: 0,
+    execPlanBuild: 0,
+    deploy: 0,
+  };
+
+  // Parse planner keys to extract timing
+  // Keys look like: "-- Total[1] 57ms", "    -- Analyzer[1] 23ms"
+  for (const key of Object.keys(planner)) {
+    const match = key.match(/--\s*(\w+)\[.*?\]\s*([\d.]+)(ms|us|ns|s)?/i);
+    if (!match) continue;
+
+    const name = match[1].toLowerCase();
+    let value = parseFloat(match[2]);
+    const unit = (match[3] || 'ms').toLowerCase();
+
+    // Convert to milliseconds
+    if (unit === 's') value *= 1000;
+    else if (unit === 'us') value /= 1000;
+    else if (unit === 'ns') value /= 1000000;
+
+    // Map to our timing object
+    if (name === 'total') timing.total = value;
+    else if (name === 'analyzer') timing.analyzer = value;
+    else if (name === 'transformer') timing.transformer = value;
+    else if (name === 'optimizer') timing.optimizer = value;
+    else if (name === 'execplanbuild') timing.execPlanBuild = value;
+    else if (name === 'deploy') timing.deploy = value;
+  }
+
+  // Only return if we found valid data
+  return timing.total > 0 ? timing : null;
+}
+
+/**
  * Main entry point - process query profile for overview analysis
  */
 export function processOverview(json) {
@@ -105,6 +151,7 @@ export function processOverview(json) {
 
   const summary = query.Summary || {};
   const execution = query.Execution || {};
+  const planner = query.Planner || {};
 
   // Extract fragments and pipelines
   const fragments = extractFragments(execution);
@@ -122,6 +169,9 @@ export function processOverview(json) {
     networkTime: execution.QueryCumulativeNetworkTime || 'N/A',
     spillBytes: execution.QuerySpillBytes || '0 B',
   };
+
+  // Add planner timing
+  analysis.plannerTiming = extractPlannerTiming(planner);
 
   return { summary, execution, analysis };
 }
